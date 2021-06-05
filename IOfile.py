@@ -7,7 +7,7 @@ import pandas as pd
 class IO(object):
 
     def Get_filename(self):
-        path = 'D:\\pythonProject-pandastry\\'
+        path = 'G:\\Pythonproject\\data-processing\\learngit-master'
         files_name = os.listdir(path)
         excel_name_list = list(filter(lambda x: re.match('.*\.xls', x) != None, files_name))
         txt_name_list=[]
@@ -25,14 +25,14 @@ class IO(object):
         fp_txt = pd.read_table(file_name_txt, sep='\t', encoding='gbk')
         return fp_excel,fp_txt,fp_location
 
-    def Output_file(self,output_name,data1,data2,data3):
+    def Output_file(self,output_name,data):
         dir_name = './data-processing'
         if not os.path.exists(dir_name):
             os.mkdir(dir_name)
         file_path = dir_name+'/' + output_name
-        data1.to_excel(file_path,sheet_name='流体数据')
-        data2.to_excel(file_path,sheet_name='传热特性')
-        data3.to_excel(file_path,sheet_name='流动阻力特性')
+        # data1.to_excel(file_path,sheet_name='流体数据')
+        data.to_excel(file_path,sheet_name='传热特性')
+        # data3.to_excel(file_path,sheet_name='流动阻力特性')
 
 
 

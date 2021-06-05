@@ -1,19 +1,10 @@
 import pandas as pd
 import  numpy as np
 import re
-import math
-import matplotlib.pyplot as plt
-from CoolProp.CoolProp import PropsSI
 from scipy.interpolate import interp1d
+import  math
+from  CoolProp.CoolProp import PropsSI
 
-
-flie_name_excel = '1-oh-3.xls'
-file_name_txt ='1-oh-3.txt'
-fp_excel = pd.read_excel(flie_name_excel, sheet_name=[0, 1, 2, 3, 4, 5, 6, 7], header=None)
-fp_txt = pd.read_table(file_name_txt,sep='\t',encoding='gbk')
-fp_location = pd.read_table('location.txt',sep='\s+')
-
-print(len(fp_excel))
 class A():
     def match_P(self,fp_txt):
         a=fp_txt.mean()
@@ -39,11 +30,10 @@ class A():
         local_localtion =[]
         a=fp_excel
         b=a.dropna(how='any')
-
         list_num = a.iloc[0][1]
         list_num = str(list_num)
         # time_seq = b.iloc[:,0].tolist
-        mean_temp_out = b.mean()
+        mean_temp_out = b.iloc[:,1:21].mean()
         mean_temp_out = mean_temp_out.to_numpy().tolist()
 
         for i in a.iloc[1]:
@@ -63,19 +53,136 @@ class A():
         data.append(mean_temp_out)
         return data
 
-class_a =A()
-# data = class_a.match_location(fp_excel[0],fp_txt,fp_location)
-# data2 = class_a.match_location(fp_excel[6],fp_txt,fp_location)
-# e = pd.DataFrame(data=data,index=['标号','位置','外壁面温度'])
-# e2 = pd.DataFrame(data=data2,index=['标号','位置','外壁面温度'])
-# e3 =e.append(e2,ignore_index=True)
-# print(e3)
-new_data = pd.DataFrame()
-for i in range(len(fp_excel)):
-    f,data_P =class_a.match_P(fp_txt)
-    data = class_a.match_location(fp_excel[i],fp_txt,fp_location)
-    DataFrame_data = pd.DataFrame(data=data,index=['标号','位置','外壁面温度'])
-    new_data = pd.concat([new_data,DataFrame_data],axis=1,ignore_index=True)
-print(new_data)
+    def Tf_data(self,fp_txt):
+        # fp_txt = pd.read_table(file_name_txt,sep='\t',encoding='gbk')
+        heat_length = 6500  # 试验件的加热段长度。单位mm
 
+        mean_data = fp_txt.mean()
+        Inlet_P = mean_data.loc['入口P']
+        Inlet_T = (mean_data.loc['入口T1'] + mean_data.loc['入口T2']) / 2
+        Inlet_x = mean_data.loc['入口含汽率']
+        Outlet_T = (mean_data.loc['出口T1'] + mean_data.loc['出口T2']) / 2
+        Power = mean_data.loc['功率P']
+        ther_eff = mean_data.loc['热效率']
+        mass_flux = mean_data.loc['FV1'] / 60  # 单位 kg/s
+        di = 0.011
+        do = 0.016
+        Area_cross = 1 / 4 * math.pi * pow(di, 2)
+        mass_flowrate = mass_flux / Area_cross
+        ther_Power = Power * ther_eff  # 加热功率 P_加热 = P *热效率 单位kW
+        heat_flux = ther_Power / (math.pi * di*heat_length / 1000)  # 热流密度 单位kw/m2
+        hfg = PropsSI('H', 'P', Inlet_P * 1e6, 'Q', 1, 'water') - PropsSI('H', 'P', Inlet_P * 1e6, 'Q', 0, 'water')
+        hf = PropsSI('H', 'P', Inlet_P * 1e6, 'Q', 0, 'water')
+        Inlet_H = Inlet_x * hfg + hf
+        delt_H = ther_Power / mass_flux * 1000  # 单位 j/kg
+        Outlet_H = Inlet_H + delt_H  # 单位 j/kg
+        perunit_deltH = delt_H / heat_length  # 单位 j/kg.mm
 
+        data_list = [heat_length, di, do, mass_flowrate, ther_Power, ther_eff, heat_flux, Inlet_T, Inlet_H, Outlet_T,
+                     Outlet_H, delt_H, perunit_deltH]
+        index = ['加热长度mm', '螺旋管内径mm', '螺旋管外径mm', '质量流率kg/m2.s', '加热功率kW', '热效率', '内壁面热流密度kW/m2', '进口温度℃', '进口焓值j/kg', \
+                 '出口温度℃', '出口焓值j/kg', '进出口焓差j/kg', '单位长度焓差j/kg.mm']
+        data_series = pd.Series(data_list, index=index)
+        return data_series
+
+    def location_data_series(self,fp_excel,fp_txt,fp_location):
+        class_a =A()
+        #处理外壁温的所有数据，整理为一个表格
+        new_data = pd.DataFrame()
+        for i in range(len(fp_excel)):
+            data = class_a.match_location(fp_excel[i],fp_txt,fp_location)
+            DataFrame_data = pd.DataFrame(data=data,index=['标号','位置','外壁面温度'])
+            new_data = pd.concat([new_data,DataFrame_data],axis=1,ignore_index=True)
+
+        Tf_data_series = class_a.Tf_data(fp_txt)
+        f,data_P = class_a.match_P(fp_txt)
+        location_ = new_data.loc['位置'].tolist()
+        location_P =map(f,location_)
+        location_P =pd.Series(location_P)
+        new_data=new_data.append(location_P,ignore_index=True)
+        new_data = new_data.sort_values(by=1,axis=1)
+        columns_index = sorted(new_data.columns)
+        new_data.columns =columns_index
+        return new_data,Tf_data_series
+
+def analyst_data(fp_excel,fp_txt,fp_location):
+    class_a = A()
+    location_data_series,Tf_data_series = class_a.location_data_series(fp_excel,fp_txt,fp_location)
+
+    location_ = location_data_series.iloc[1]
+    temp_out = location_data_series.iloc[2]
+    location_P = location_data_series.iloc[3]
+    heat_flux = Tf_data_series['内壁面热流密度kW/m2']
+    do = Tf_data_series.loc['螺旋管外径mm']
+    di = Tf_data_series.loc['螺旋管内径mm']
+    delt_enthalpy = Tf_data_series.loc['进出口焓差j/kg']
+    perunit_deltH = Tf_data_series.loc['单位长度焓差j/kg.mm']
+    Inlet_H = Tf_data_series.loc['进口焓值j/kg']
+
+    thermal_conduc = []
+    temp_in = []
+    for i in temp_out:
+        middle_tc = 22.69 + 0.023*i - 0.000025238*i**2
+        middle_tem = i - heat_flux*1000*di*pow(do,2)/(4*middle_tc*(pow(do,2)-pow(di,2)))*(2*math.log(do/di)+pow(di,2)/pow(do,2)-1)
+        thermal_conduc.append(middle_tc)
+        temp_in.append(middle_tem)
+    temp_in = pd.Series(temp_in)
+    thermal_conduc = pd.Series(thermal_conduc)
+    location_data_series = location_data_series.append(thermal_conduc,ignore_index=True)
+    location_data_series = location_data_series.append(temp_in,ignore_index=True)
+    enthalpy = []
+    steam_quality = []
+    temp_Tf = []
+    coeff_heat_transfer = []
+    for i in range(len(location_)):
+        middle_h = Inlet_H + perunit_deltH*location_[i]
+        middle_P = location_P[i]*1e6      #单位 Pa
+        hf = PropsSI('H','P',middle_P,'Q',0,'water')
+        hfg = PropsSI('H','P',middle_P,'Q',1,'water') - PropsSI('H','P',middle_P,'Q',0,'water')
+        middle_x = (middle_h - hf)/hfg
+        middle_tf = PropsSI('T','P',middle_P,'H',middle_h,'water') - 273.15
+        middle_htc = heat_flux/(temp_in[i]-middle_tf)*1000
+        enthalpy.append(middle_h)
+        steam_quality.append(middle_x)
+        temp_Tf.append(middle_tf)
+        coeff_heat_transfer.append(middle_htc)
+    enthalpy = pd.Series(enthalpy)
+    steam_quality = pd.Series(steam_quality)
+    temp_Tf = pd.Series(temp_Tf)
+    coeff_heat_transfer = pd.Series(coeff_heat_transfer)
+    location_data_series = location_data_series.append(enthalpy,ignore_index=True)
+    location_data_series = location_data_series.append(steam_quality,ignore_index=True)
+    location_data_series = location_data_series.append(temp_Tf,ignore_index=True)
+    location_data_series = location_data_series.append(coeff_heat_transfer,ignore_index=True)
+    location_data_series = location_data_series.reindex([0,1,3,4,7,8,6,2,5,9])
+    data_combine_A = location_data_series.loc[:,location_data_series.iloc[0] == 'A'].T
+    data_combine_B = location_data_series.loc[:,location_data_series.iloc[0] == 'B'].T
+    data_combine_C = location_data_series.loc[:,location_data_series.iloc[0] == 'C'].T
+    data_combine_D = location_data_series.loc[:,location_data_series.iloc[0] == 'D'].T
+
+    data_combine_A.index = list(range(len(data_combine_A.index)))
+    data_combine_B.index = list(range(len(data_combine_B.index)))
+    data_combine_C.index = list(range(len(data_combine_C.index)))
+    data_combine_D.index = list(range(len(data_combine_D.index)))
+
+    data_combine = pd.DataFrame()
+    data_combine = pd.concat([data_combine,data_combine_A,data_combine_B.iloc[:,7:10],data_combine_C.iloc[:,7:10],data_combine_D.iloc[:,7:10]],axis=1,ignore_index=True)
+
+    ave_temp_out = []
+    ave_temp_in  = []
+    ave_htc =[]
+    index = data_combine.index
+    for i in index:
+        middle_ave_temp_out = (data_combine_A.iloc[i,7]+data_combine_B.iloc[i,7]+data_combine_C.iloc[i,7]+data_combine_D.iloc[i,7])/4
+        middle_ave_temp_in  = (data_combine_A.iloc[i,8]+data_combine_B.iloc[i,8]+data_combine_C.iloc[i,8]+data_combine_D.iloc[i,8])/4
+        middle_tf = data_combine_A.iloc[i,5]
+        middle_ave_htc = heat_flux/(middle_ave_temp_in-middle_tf)*1000
+        ave_temp_out.append(middle_ave_temp_out)
+        ave_temp_in.append(middle_ave_temp_in)
+        ave_htc.append(middle_ave_htc)
+    ave_temp_out = pd.Series(ave_temp_out)
+    ave_temp_in =pd.Series(ave_temp_in)
+    ave_htc =pd.Series(ave_htc)
+    data_combine = pd.concat([data_combine,ave_temp_out,ave_temp_in,ave_htc],axis=1)
+    data_combine.insert(loc=7,column='热流密度kW/m2',value=heat_flux)
+    return data_combine
