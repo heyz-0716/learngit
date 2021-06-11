@@ -10,36 +10,34 @@ class A():
         a=fp_txt.mean()
         a = a.dropna(how='any')
         P = []
+        vertival_height = 456
+        dp_between_impulse = PropsSI('D','T',30+273.15,'P',a.loc['入口P']*1e6,'water')*9.8*vertival_height/12/1000/1000   #单位 kPa
         P.append(a.loc['入口P']-a.loc['DP1-2']/1000)  #入口压力指的是加热起始点处的压力，此处压力并没有直接测量，先用估算值
-        for i in range(9,20):
-            P.append(P[i-9]-a.iloc[i]/1000)
-        location_P = list(range(230,6000,520))
-        data_P =[]
-        data_P.append(location_P)
-        data_P.append(P)
+        for i in a.loc['DP1-2':'DP11-12']:
+            P.append(P[-1]-i/1000-dp_between_impulse/1000)
+        location_P = list(range(230,6000,520))       #引压管位置，最好也有配置文件进行配置，后续可改进
+        data_P = [location_P] + [P]
         x ,y = data_P[0], data_P[1]
         f = interp1d(x, y, kind='linear')
         return  f , data_P
 
-    #处理一个子excel表格里的数据，即处理的是一个工作表的内容
-    def match_location(self,fp_excel,fp_txt,fp_location):
-        f, data_P = self.match_P(fp_txt)
-        data = []
+    #处理一个子excel表格里的数据，即处理的是一个工作表的内容,即形参 fp_excel 是一个dataframe，要注意
+    def match_location(self,fp_excel,fp_location):
         location_numpy = fp_location.to_numpy()
         middle=[]
         local_localtion =[]
         a=fp_excel
         b=a.dropna(how='any')
-        list_num = a.iloc[0][1]
+        del b[0]                            #删除Time_series，因为时间序列无法算平均值
+        list_num = a.iloc[0][1]             #定位，指的是第i个数据板卡
         list_num = str(list_num)
-        # time_seq = b.iloc[:,0].tolist
-        mean_temp_out = b.iloc[:,1:21].mean()
+        mean_temp_out = b.mean()
         mean_temp_out = mean_temp_out.to_numpy().tolist()
-
-        for i in a.iloc[1]:
-            i = str(i)
-            i=re.findall(r"\d+",i)
-            i=list_num + '-' + ''.join(i)
+        index_tab = map(lambda item: list_num + '-' + re.findall(r'\d+', item)[0], a.iloc[1].dropna(how='any'))
+        for i in index_tab:
+            # i = str(i)
+            # i=re.findall(r"\d+",i)
+            # i=list_num + '-' + ''.join(i)
             location = np.where(location_numpy == i)
             row_index = location[0]
             columns_index = location[1]
@@ -48,13 +46,10 @@ class A():
                 columns_index = int(columns_index)
                 middle.append(fp_location.loc[row_index]['L'])
                 local_localtion.append(fp_location.columns[columns_index])
-        data.append(local_localtion)
-        data.append(middle)
-        data.append(mean_temp_out)
+        data = [local_localtion] + [middle] + [mean_temp_out]
         return data
 
     def Tf_data(self,fp_txt):
-        # fp_txt = pd.read_table(file_name_txt,sep='\t',encoding='gbk')
         heat_length = 6500  # 试验件的加热段长度。单位mm
 
         mean_data = fp_txt.mean()
@@ -79,9 +74,9 @@ class A():
         perunit_deltH = delt_H / heat_length  # 单位 j/kg.mm
 
         data_list = [heat_length, di, do, mass_flowrate, ther_Power, ther_eff, heat_flux, Inlet_T, Inlet_H, Outlet_T,
-                     Outlet_H, delt_H, perunit_deltH]
+                     Outlet_H, delt_H, perunit_deltH, Inlet_x,Inlet_P]
         index = ['加热长度mm', '螺旋管内径mm', '螺旋管外径mm', '质量流率kg/m2.s', '加热功率kW', '热效率', '内壁面热流密度kW/m2', '进口温度℃', '进口焓值j/kg', \
-                 '出口温度℃', '出口焓值j/kg', '进出口焓差j/kg', '单位长度焓差j/kg.mm']
+                 '出口温度℃', '出口焓值j/kg', '进出口焓差j/kg', '单位长度焓差j/kg.mm','进口含汽率','入口P']
         data_series = pd.Series(data_list, index=index)
         return data_series
 
@@ -90,7 +85,7 @@ class A():
         #处理外壁温的所有数据，整理为一个表格
         new_data = pd.DataFrame()
         for i in range(len(fp_excel)):
-            data = class_a.match_location(fp_excel[i],fp_txt,fp_location)
+            data = class_a.match_location(fp_excel[i],fp_location)
             DataFrame_data = pd.DataFrame(data=data,index=['标号','位置','外壁面温度'])
             new_data = pd.concat([new_data,DataFrame_data],axis=1,ignore_index=True)
 
@@ -109,6 +104,7 @@ def analyst_data(fp_excel,fp_txt,fp_location):
     class_a = A()
     location_data_series,Tf_data_series = class_a.location_data_series(fp_excel,fp_txt,fp_location)
 
+    index_tab = location_data_series.iloc[0]
     location_ = location_data_series.iloc[1]
     temp_out = location_data_series.iloc[2]
     location_P = location_data_series.iloc[3]
@@ -122,7 +118,7 @@ def analyst_data(fp_excel,fp_txt,fp_location):
     thermal_conduc = []
     temp_in = []
     for i in temp_out:
-        middle_tc = 22.69 + 0.023*i - 0.000025238*i**2
+        middle_tc = 22.69 + 0.023*i - 0.000025238*i**2      #计算热导率，后续可改进
         middle_tem = i - heat_flux*1000*di*pow(do,2)/(4*middle_tc*(pow(do,2)-pow(di,2)))*(2*math.log(do/di)+pow(di,2)/pow(do,2)-1)
         thermal_conduc.append(middle_tc)
         temp_in.append(middle_tem)
@@ -183,6 +179,6 @@ def analyst_data(fp_excel,fp_txt,fp_location):
     ave_temp_out = pd.Series(ave_temp_out)
     ave_temp_in =pd.Series(ave_temp_in)
     ave_htc =pd.Series(ave_htc)
-    data_combine = pd.concat([data_combine,ave_temp_out,ave_temp_in,ave_htc],axis=1)
+    data_combine = pd.concat([data_combine,ave_temp_out,ave_temp_in,ave_htc],axis=1,ignore_index=True)
     data_combine.insert(loc=7,column='热流密度kW/m2',value=heat_flux)
     return data_combine

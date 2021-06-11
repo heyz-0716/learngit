@@ -6,17 +6,12 @@ import pandas as pd
 #获取数据文件夹底下的excel表格名以及txt文件名，并形成读入文件名列表和输出文件名列表
 class IO(object):
 
-    def Get_filename(self):
-        path = 'G:\\Pythonproject\\data-processing\\learngit-master'
+    def Get_filename(self,path):
+        # path = 'G:\\Pythonproject\\data-processing\\learngit-master'
         files_name = os.listdir(path)
         excel_name_list = list(filter(lambda x: re.match('.*\.xls', x) != None, files_name))
-        txt_name_list=[]
-        output_name_list =[]
-        for i in excel_name_list:
-            txt_name = i.split('.')[0] + '.txt'
-            txt_name_list.append(txt_name)
-            output_name = i.split('.')[0] + '-data.xlsx'
-            output_name_list.append(output_name)
+        txt_name_list = list(map(lambda item: item.split('.')[0] + '.txt', excel_name_list))
+        output_name_list = list(map(lambda item: item.split('.')[0] + '.xlsx', excel_name_list))
         return excel_name_list,txt_name_list,output_name_list
 
     def Read_file(self,file_name_excel,file_name_txt):
