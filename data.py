@@ -19,7 +19,7 @@ class A():
         data_P = [location_P] + [P]
         x ,y = data_P[0], data_P[1]
         f = interp1d(x, y, kind='linear')
-        return  f , data_P
+        return  f , data_P , vertival_height
 
     #处理一个子excel表格里的数据，即处理的是一个工作表的内容,即形参 fp_excel 是一个dataframe，要注意
     def match_location(self,fp_excel,fp_location):
@@ -81,7 +81,7 @@ class A():
         return data_series
 
     def location_data_series(self,fp_excel,fp_txt,fp_location):
-        class_a =A()
+        class_a = A()
         #处理外壁温的所有数据，整理为一个表格
         new_data = pd.DataFrame()
         for i in range(len(fp_excel)):
@@ -90,11 +90,11 @@ class A():
             new_data = pd.concat([new_data,DataFrame_data],axis=1,ignore_index=True)
 
         Tf_data_series = class_a.Tf_data(fp_txt)
-        f,data_P = class_a.match_P(fp_txt)
+        f,data_P , _ = class_a.match_P(fp_txt)
         location_ = new_data.loc['位置'].tolist()
-        location_P =map(f,location_)
-        location_P =pd.Series(location_P)
-        new_data=new_data.append(location_P,ignore_index=True)
+        location_P = map(f,location_)
+        location_P = pd.Series(location_P)
+        new_data = new_data.append(location_P,ignore_index=True)
         new_data = new_data.sort_values(by=1,axis=1)
         columns_index = sorted(new_data.columns)
         new_data.columns =columns_index

@@ -7,20 +7,19 @@ import IOfile
 from  CoolProp.CoolProp import PropsSI
 
 IO_class = IOfile.IO()
-data_path = 'G:\\Pythonproject\\data-processing\\learngit-master'
+data_path = 'D:\\pythonProject-pandastry'
 excel_name_list,txt_name_list,output_name_list = IO_class.Get_filename(data_path)
 file_name_txt = txt_name_list[0]
 file_name_excel = excel_name_list[0]
 fp_location = pd.read_table('location.txt', sep='\s+')
 fp_excel = pd.read_excel(file_name_excel, sheet_name=[0, 1, 2, 3, 4, 5, 6, 7], header=None)
 fp_txt = pd.read_table(file_name_txt, sep='\t', encoding='gbk')
-
 class_A = data.A()
-f,data_P = class_A.match_P(fp_txt)
+# print(class_A.match_P(fp_txt)[0:2])
+f,data_P , vertical_height = class_A.match_P(fp_txt)
 Tf_data_Series = class_A.Tf_data(fp_txt)
 index_tab = list(range(1,13))
-
-vertical_height = 456     #试验件的垂直高度
+# print(data_P)
 relative_height = vertical_height/len(data_P[0])
 
 enthalpy = list(map(lambda item:Tf_data_Series.loc['进口焓值j/kg'] + Tf_data_Series.loc['单位长度焓差j/kg.mm']*item,data_P[0]))
@@ -40,7 +39,7 @@ local_specificVolume = list(map(lambda x,y:1/PropsSI('D','P',x*1e6,'H',y,'water'
 
 for i in range(len(relative_height)):
     if i==0:
-        relative_height[i] =0
+        relative_height[i] = 0
     else:
         relative_height[i] = relative_height[i-1]+relative_height[i]
 
